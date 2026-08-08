@@ -1,0 +1,64 @@
+# LiteLLM gateway config
+#
+# Two deployments behind one logical route:
+#   lab-chat        -> local llama-server (primary)
+#   lab-chat-hosted -> Kimi K2.6 via Moonshot API (fallback)
+#
+# K2.6 (not K3): supports thinking disable for voice — pass
+#   thinking: {type: disabled}  (+ temperature 0.6 when disabled)
+# K3 always reasons (reasoning_effort only); unsuitable for TTFT-bound voice.
+#
+# Reliability layer (the failover exercise):
+#   retries (per error type) -> cooldown (pull unhealthy deployment) -> fallback (hosted)
+# Drill: scripts/failover-drill.sh, then scale llama-server to 0 mid-loop.
+
+model_list:
+  - model_name: lab-chat
+    litellm_params:
+      model: openai/local-model            # llama-server is OpenAI-compatible
+      api_base: http://llama-server:8080/v1
+      api_key: "none"
+      timeout: 60
+
+  - model_name: lab-chat-hosted
+    litellm_params:
+      # Native moonshot/ provider (not openai/) so `thinking` is a first-class param.
+      # openai/kimi-* blows up: AsyncCompletions.create() unexpected kwarg 'thinking'.
+      model: moonshot/kimi-k2.6
+      api_base: https://api.moonshot.ai/v1
+      api_key: os.environ/MOONSHOT_API_KEY
+      timeout: 120
+      # Voice default: no reasoning tokens. Callers can override per-request if needed.
+      extra_body:
+        thinking:
+          type: disabled
+
+litellm_settings:
+  # Gateway-level economics logging (observability layer 2).
+  # App-level traces (layer 1) join via trace_id/session_id passed in
+  # request metadata from the Phase 4 LangGraph app.
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+  request_timeout: 120
+  # Forward non-OpenAI body fields (e.g. thinking) instead of stripping them.
+  drop_params: false
+
+router_settings:
+  # Retry the same deployment first, tuned per error class
+  retry_policy:
+    TimeoutErrorRetries: 2
+    RateLimitErrorRetries: 3
+    InternalServerErrorRetries: 1
+    ContentPolicyViolationErrorRetries: 0
+
+  # Passive health tracking: after `allowed_fails` failures, the deployment
+  # is removed from the pool for `cooldown_time` seconds, then re-admitted.
+  allowed_fails: 2
+  cooldown_time: 60
+
+  # If lab-chat is exhausted (retries + cooldown), route to hosted
+  fallbacks:
+    - lab-chat: ["lab-chat-hosted"]
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

@@ -1,0 +1,58 @@
+# llm-gateway values
+# Secrets are NOT set here. Copy values-secrets.example.yaml to
+# values-secrets.yaml (gitignored) and pass with -f.
+
+llamaServer:
+  image: ghcr.io/ggml-org/llama.cpp:server
+  modelFile: qwen2.5-3b-instruct-q4_k_m.gguf
+  modelUrl: https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf
+  ctxSize: 4096
+  parallel: 2
+  modelStorage: 20Gi
+  # Pin to the big node: 16 cores / 32GB
+  nodeSelector:
+    kubernetes.io/hostname: lab-worker-01
+  resources:
+    requests:
+      cpu: "4"
+      memory: 6Gi
+    limits:
+      cpu: "12"
+      memory: 10Gi
+
+litellm:
+  image: ghcr.io/berriai/litellm:main-stable
+  # Langfuse service DNS: <release>-web in the langfuse namespace
+  # (verify with `kubectl get svc -n langfuse` after installing the langfuse chart)
+  langfuseHost: http://langfuse-web.langfuse.svc.cluster.local:3000
+  nodeSelector:
+    kubernetes.io/hostname: lab-worker-01
+  resources:
+    requests:
+      cpu: 250m
+      memory: 768Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+  host: llm.home.macpheelabs.com
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    # Must match the kube-prometheus-stack helm release name so the
+    # operator's serviceMonitorSelector picks it up
+    releaseLabel: kube-prometheus-stack
+    interval: 15s
+
+# Overridden by values-secrets.yaml
+secrets:
+  litellmMasterKey: ""
+  moonshotApiKey: ""
+  langfusePublicKey: ""
+  langfuseSecretKey: ""

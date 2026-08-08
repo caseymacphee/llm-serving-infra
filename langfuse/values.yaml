@@ -1,0 +1,40 @@
+# Values for the official Langfuse helm chart (langfuse/langfuse).
+# Deploys Langfuse v3 with bundled postgres, clickhouse, redis, and minio.
+#
+#   helm repo add langfuse https://langfuse.github.io/langfuse-k8s
+#   helm upgrade --install langfuse langfuse/langfuse \
+#     --namespace langfuse --create-namespace \
+#     -f values.yaml -f values-secrets.yaml
+#
+# NOTE: written against the chart's documented value names; verify key names
+# against `helm show values langfuse/langfuse` before first install, the
+# chart moves. Storage defaults to the cluster's default storage class
+# (local-path on k3s), which is what we want.
+#
+# Secrets (salt, encryptionKey, nextauth secret, db passwords) go in a
+# gitignored values-secrets.yaml alongside this file — see
+# values-secrets.example.yaml. Generate with: openssl rand -hex 32
+
+langfuse:
+  nextauth:
+    url: http://langfuse.home.macpheelabs.com
+  telemetryEnabled: false
+  ingress:
+    enabled: true
+    className: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: web
+    hosts:
+      - host: langfuse.home.macpheelabs.com
+        paths:
+          - path: /
+            pathType: Prefix
+
+  # Homelab sizing: everything on the worker node with the monitoring stack.
+  # Clickhouse is the heavy one; watch memory in Grafana after install.
+  web:
+    nodeSelector:
+      kubernetes.io/hostname: lab-worker-01
+  worker:
+    nodeSelector:
+      kubernetes.io/hostname: lab-worker-01

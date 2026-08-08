@@ -1,0 +1,21 @@
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+# Scraped by the existing kube-prometheus-stack (observability layer 3).
+# The release label must match the kube-prometheus-stack helm release name,
+# or the operator's serviceMonitorSelector will ignore this.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: llama-server
+  labels:
+    app: llama-server
+    app.kubernetes.io/part-of: llm-gateway
+    release: {{ .Values.monitoring.serviceMonitor.releaseLabel }}
+spec:
+  selector:
+    matchLabels:
+      app: llama-server
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+{{- end }}

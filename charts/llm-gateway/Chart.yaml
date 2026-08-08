@@ -1,0 +1,5 @@
+apiVersion: v2
+name: llm-gateway
+description: llama-server (CPU inference) + LiteLLM gateway with failover, for the homelab k3s cluster
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,115 @@
+# Inference engine: llama-server on CPU, model on a local-path PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llama-models
+  labels:
+    app.kubernetes.io/part-of: llm-gateway
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: {{ .Values.llamaServer.modelStorage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-server
+  labels:
+    app: llama-server
+    app.kubernetes.io/part-of: llm-gateway
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # RWO volume + CPU-heavy; never run two at once
+  selector:
+    matchLabels:
+      app: llama-server
+  template:
+    metadata:
+      labels:
+        app: llama-server
+    spec:
+      {{- with .Values.llamaServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # Download the GGUF into the PVC if missing. Changing modelFile/modelUrl
+        # in values pulls the new model on the next rollout.
+        - name: model-download
+          image: curlimages/curl:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              if [ -f "/models/{{ .Values.llamaServer.modelFile }}" ]; then
+                echo "model already present, skipping"
+                exit 0
+              fi
+              echo "downloading {{ .Values.llamaServer.modelFile }}..."
+              curl -fL --retry 3 -o "/models/{{ .Values.llamaServer.modelFile }}.tmp" \
+                "{{ .Values.llamaServer.modelUrl }}"
+              mv "/models/{{ .Values.llamaServer.modelFile }}.tmp" \
+                 "/models/{{ .Values.llamaServer.modelFile }}"
+              echo "done"
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: llama-server
+          image: {{ .Values.llamaServer.image }}
+          args:
+            - "-m"
+            - "/models/{{ .Values.llamaServer.modelFile }}"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8080"
+            - "--ctx-size"
+            - {{ .Values.llamaServer.ctxSize | quote }}
+            - "--parallel"
+            - {{ .Values.llamaServer.parallel | quote }}
+            - "--metrics"
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+          resources:
+            {{- toYaml .Values.llamaServer.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llama-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-server
+  labels:
+    app: llama-server
+    app.kubernetes.io/part-of: llm-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: llama-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

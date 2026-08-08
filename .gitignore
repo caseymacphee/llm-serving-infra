@@ -1,0 +1,3 @@
+values-secrets.yaml
+*.gguf
+.DS_Store
