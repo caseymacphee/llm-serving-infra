@@ -1,8 +1,10 @@
 # LiteLLM gateway config
 #
-# Two deployments behind one logical route:
+# Serving routes:
 #   lab-chat        -> local llama-server (primary)
 #   lab-chat-hosted -> Kimi K2.6 via Moonshot API (fallback)
+#
+# Instrument routes (see below): lab-caller, lab-judge
 #
 # K2.6 (not K3): supports thinking disable for voice — pass
 #   thinking: {type: disabled}  (+ temperature 0.6 when disabled)
@@ -33,9 +35,13 @@ model_list:
         thinking:
           type: disabled
 
-  # Eval instrument models — different family from the system under test (Kimi).
-  # lab-caller: simulated tier-2 personas. lab-judge: pairwise blind comparison.
-  # Report their spend separately from agent cost (instrument vs system).
+  # Eval instrument models — deliberately a different model family from the
+  # system under test, to avoid same-family artifacts (self-preference in the
+  # judge, shared phrasing habits in the simulated caller).
+  #   lab-caller: model-driven caller for multi-turn conversation evals
+  #   lab-judge:  pairwise blind comparison, position-swapped
+  # Their spend is reported separately from agent cost — pooling instrument
+  # cost with system cost makes the economics meaningless.
   - model_name: lab-caller
     litellm_params:
       model: anthropic/claude-sonnet-4-6
@@ -50,8 +56,9 @@ model_list:
 
 litellm_settings:
   # Gateway-level economics logging (observability layer 2).
-  # App-level traces (layer 1) join via trace_id/session_id passed in
-  # request metadata from the Phase 4 LangGraph app.
+  # Application traces (layer 1) join to these via trace_id/session_id passed
+  # in each request's metadata. Without that propagation you get two
+  # disconnected views of the same request.
   success_callback: ["langfuse"]
   failure_callback: ["langfuse"]
   request_timeout: 120
