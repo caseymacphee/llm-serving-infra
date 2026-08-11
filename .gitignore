@@ -1,3 +1,11 @@
 values-secrets.yaml
 *.gguf
 .DS_Store
+
+# Private working notes (local only — not for remote tracking)
+/NOTES.md
+/DESIGN*.md
+/PREDICTIONS*.md
+/TASKS*.md
+/PRD*.md
+/PLAN*.md

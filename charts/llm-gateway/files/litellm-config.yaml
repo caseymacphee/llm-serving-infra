@@ -33,6 +33,21 @@ model_list:
         thinking:
           type: disabled
 
+  # Eval instrument models — different family from the system under test (Kimi).
+  # lab-caller: simulated tier-2 personas. lab-judge: pairwise blind comparison.
+  # Report their spend separately from agent cost (instrument vs system).
+  - model_name: lab-caller
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+      timeout: 180
+
+  - model_name: lab-judge
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+      timeout: 180
+
 litellm_settings:
   # Gateway-level economics logging (observability layer 2).
   # App-level traces (layer 1) join via trace_id/session_id passed in
